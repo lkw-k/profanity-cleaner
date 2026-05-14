@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 환경변수 (절대 커밋 금지)
+.env
+
+# 모델 / 데이터 파일 (용량 큼)
+*.pt
+*.bin
+*.safetensors
+models/
+checkpoints/
+data/*.csv
+data/*.json
+data/*.tsv
+!data/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
