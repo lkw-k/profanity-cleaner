@@ -14,3 +14,6 @@ bot = commands.Bot(commands_prefix='!', intents=intents) # 봇 객체 생성
 @bot.event
 async def on_ready():
     print(f"봇 로그인 성공 : {bot.user.name}")  # 봇이 로그인되면 콘솔에 메시지 출력
+@bot.command(name='ping')
+async def ping(ctx):
+    await ctx.send('pong')  # !ping 명령어에 대한 응답으로 'pong' 메시지 전송
