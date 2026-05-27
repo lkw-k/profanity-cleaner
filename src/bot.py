@@ -10,3 +10,7 @@ intents = discord.Intents.default() # 디스코드 봇의 권한 설정
 intents.message_content = True # 메시지 내용 읽기 권한 활성화
 
 bot = commands.Bot(commands_prefix='!', intents=intents) # 봇 객체 생성
+
+@bot.event
+async def on_ready():
+    print(f"봇 로그인 성공 : {bot.user.name}")  # 봇이 로그인되면 콘솔에 메시지 출력
