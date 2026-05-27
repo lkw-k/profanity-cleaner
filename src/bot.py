@@ -16,6 +16,12 @@ bot = commands.Bot(command_prefix='!', intents=intents)   # 봇 객체 생성
 async def on_ready():
     print(f"봇 로그인 성공 : {bot.user.name}")   # 봇이 로그인되면 콘솔에 메시지 출력
 
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:              # 봇 자신의 메시지는 무시
+        return
+    print(f"감지: {message.content}") 
+    await bot.process_commands(message)
 
 @bot.command(name='ping')
 async def ping(ctx):
