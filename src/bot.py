@@ -54,6 +54,20 @@ def is_profanity(text: str) -> bool:
     pred = torch.argmax(outputs.logits, dim=1).item()
     return pred == 1  # 1이면 비속어, 0이면 정상
 
+def clean_with_groq(text: str) -> dict:
+    """Groq에 마스킹+교정 요청. {'masked': ..., 'corrected': ...} 반환."""
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.3,
+    )
+    result_text = response.choices[0].message.content
+    return json.loads(result_text)
+
 @bot.event
 async def on_ready():
     print(f"봇 로그인 성공 : {bot.user.name}")   # 봇이 로그인되면 콘솔에 메시지 출력
@@ -63,7 +77,22 @@ async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
     print(f"감지: {message.content}") 
+    # KcBERT 비속어 판정
+    if is_profanity(message.content):
+        try:
+            # Groq에 마스킹+교정 요청
+            result = clean_with_groq(message.content)
+            reply = (
+                f"원문: {result['masked']}\n"
+                f"교정: {result['corrected']}"
+            )
+            # 원본 메시지에 답글로 응답
+            await message.reply(reply)
+        except Exception as e:
+            print(f"Groq 호출 실패: {e}")
+            await message.channel.send("교정 중 오류가 발생했어요")
     await bot.process_commands(message)
+
 
 @bot.command(name='ping')
 async def ping(ctx):
