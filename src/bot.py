@@ -46,6 +46,13 @@ intents.message_content = True               # 메시지 내용 읽기 권한 �
 
 bot = commands.Bot(command_prefix='!', intents=intents)   # 봇 객체 생성
 
+def is_profanity(text: str) -> bool:
+    """kcbert로 비속어 여부 판정. 비속어면 True"""
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=128)  # 텍스트 토큰화
+    with torch.no_grad():  # 그래디언트 계산 비활성화
+        outputs = model(**inputs)  # 모델에 입력 전달
+    pred = torch.argmax(outputs.logits, dim=1).item()
+    return pred == 1  # 1이면 비속어, 0이면 정상
 
 @bot.event
 async def on_ready():
