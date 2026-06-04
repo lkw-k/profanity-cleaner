@@ -2,6 +2,12 @@ import os                           # 환경변수 읽기
 import discord                      # 디스코드 라이브러리
 from discord.ext import commands    # 디스코드 봇 명령어
 from dotenv import load_dotenv      # .env 파일 읽기
+import json                         # JSON 파싱
+import torch                        # PyTorch 버트 모델이라 파이토치 사용해야함
+from transformers import AutoTokenizer, AutoModelForSequenceClassification  # kcbert 모델 불러오기
+from groq import Groq
+
+
 
 load_dotenv()                                # .env 파일에서 환경변수 읽기
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')       # 환경변수에서 봇 토큰 읽기

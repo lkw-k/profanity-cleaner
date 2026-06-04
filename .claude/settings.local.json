@@ -11,7 +11,23 @@
       "Bash(git push *)",
       "Bash(python -c \"import json; nb=json.load\\(open\\('notebooks/01_data_explore.ipynb','r',encoding='utf-8'\\)\\); [print\\(f'셀{i+1}:', c['source'][:80] if c['source'] else '\\(비어있음\\)'\\) for i,c in enumerate\\(nb['cells']\\)]\")",
       "Bash(python -c \"import json; nb=json.load\\(open\\('notebooks/01_data_explore.ipynb','r',encoding='utf-8'\\)\\); print\\('총 셀 수:', len\\(nb['cells']\\)\\); [print\\(f'셀{i+1} id={c[\\\\\"id\\\\\"]}: {repr\\(c[\\\\\"source\\\\\"][:1] if isinstance\\(c[\\\\\"source\\\\\"], str\\) else \\(c[\\\\\"source\\\\\"][0][:30] if c[\\\\\"source\\\\\"] else \\\\\"EMPTY\\\\\"\\)\\)}'\\) for i,c in enumerate\\(nb['cells']\\)]\")",
-      "Bash(python -c \"import sys; lines=[l for l in sys.stdin if l.startswith\\('+'\\) and not l.startswith\\('+++'\\)]; print\\(''.join\\(lines[:80]\\)\\)\")"
+      "Bash(python -c \"import sys; lines=[l for l in sys.stdin if l.startswith\\('+'\\) and not l.startswith\\('+++'\\)]; print\\(''.join\\(lines[:80]\\)\\)\")",
+      "Bash(.venvScriptspython.exe -c ' *)",
+      "PowerShell(& \"C:\\\\Users\\\\User\\\\profanity-cleaner\\\\.venv\\\\Scripts\\\\pip.exe\" install google-genai -q; Write-Output \"설치 완료\")",
+      "PowerShell(& \"C:\\\\Users\\\\User\\\\profanity-cleaner\\\\.venv\\\\Scripts\\\\python.exe\" -m pip install google-genai -q; Write-Output \"완료\")",
+      "PowerShell(& \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\" -m pip install google-genai -q --target \"C:\\\\Users\\\\User\\\\profanity-cleaner\\\\.venv\\\\Lib\\\\site-packages\"; Write-Output \"완료\")",
+      "PowerShell(& \"C:\\\\Users\\\\User\\\\profanity-cleaner\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import google; print\\(google.__path__\\)\")",
+      "PowerShell(uv pip *)",
+      "PowerShell(& \"C:\\\\Users\\\\User\\\\profanity-cleaner\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import sys; print\\(sys.path\\)\")",
+      "Bash(python -c \"import openai; import dotenv; print\\('openai:', openai.__version__\\); print\\('dotenv: OK'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(ls -Path \"C:\\\\Users\\\\User\\\\profanity-cleaner\" -Recurse -Depth 1 | Where-Object {$_.PSIsContainer -eq $false} | Select-Object FullName)",
+      "PowerShell(dir \"C:\\\\Users\\\\User\\\\profanity-cleaner\" | Where-Object {-not $_.PSIsContainer})",
+      "Bash(uv add *)",
+      "Bash(git commit *)",
+      "Bash(uv sync *)",
+      "Bash(uv pip *)"
     ]
   }
 }
