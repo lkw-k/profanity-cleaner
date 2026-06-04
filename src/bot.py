@@ -13,7 +13,7 @@ load_dotenv()                                # .env 파일에서 환경변수 �
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')       # 환경변수에서 봇 토큰 읽기
 
 # Groq API 키 설정
-groq_api_key = os.getenv('GROQ_API_KEY')   # 환경변수에서 Groq API 키 읽기
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')   # 환경변수에서 Groq API 키 읽기
 
 #kcbert 모델 fhem (봇 시작할때 1회 실행)
 MODEL_NAME = "illimax/kcbert-profanity"
