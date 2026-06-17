@@ -99,6 +99,31 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.user_id == bot.user.id:
+        return
+    if str(payload.emoji) != FEEDBACK_EMOJI:
+        return
+    channel = bot.get_channel(payload.channel_id)
+    message = await channel.fetch_message(payload.message_id)
+    if message.author == bot.user:
+        return
+    if database.is_already_saved(str(payload.message_id)):
+        return
+    try:
+        result = clean_with_groq(message.content)
+        reply = (
+            f"원문: {result['masked']}\n"
+            f"교정: {result['corrected']}"
+        )
+        await message.reply(reply)
+    except Exception as e:
+        print(f"Groq 호출 실패: {e}")
+        await message.channel.send("교정 중 오류가 발생했어요")
+    database.save_profanity(str(payload.message_id), message.content)
+
+
 @bot.command(name='ping')
 async def ping(ctx):
     await ctx.send('pong')                   # !ping 명령어에 'pong' 응답
