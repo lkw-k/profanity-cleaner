@@ -25,6 +25,7 @@ model.eval()  # 모델을 평가 모드로 설정
 print("모델 불러오기 완료")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
+_groq_cache: dict[str, dict] = {}
 
 # Groq에 보낼 프롬프트
 SYSTEM_PROMPT = """한국어 비속어 정제 도구. 출력에 욕설·비속어를 절대 포함하지 마.
@@ -52,6 +53,8 @@ def is_profanity(text: str) -> bool:
 
 def clean_with_groq(text: str) -> dict:
     """Groq에 마스킹+교정 요청. {'masked': ..., 'corrected': ...} 반환."""
+    if text in _groq_cache:
+        return _groq_cache[text]
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
@@ -63,7 +66,9 @@ def clean_with_groq(text: str) -> dict:
         max_tokens=200,
     )
     result_text = response.choices[0].message.content
-    return json.loads(result_text)
+    result = json.loads(result_text)
+    _groq_cache[text] = result
+    return result
 
 @bot.event
 async def on_ready():
