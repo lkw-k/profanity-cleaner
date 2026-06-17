@@ -60,6 +60,7 @@ def clean_with_groq(text: str) -> dict:
         ],
         response_format={"type": "json_object"},
         temperature=0.3,
+        max_tokens=200,
     )
     result_text = response.choices[0].message.content
     return json.loads(result_text)
