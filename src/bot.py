@@ -113,7 +113,7 @@ async def on_raw_reaction_add(payload):
         return
     if str(payload.emoji) != FEEDBACK_EMOJI:
         return
-    channel = bot.get_channel(payload.channel_id)
+    channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
     message = await channel.fetch_message(payload.message_id)
     if message.author == bot.user:
         return
