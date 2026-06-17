@@ -42,8 +42,11 @@ SYSTEM_PROMPT = """너는 한국어 비속어를 처리하는 도구야. 입력 
 
 {"masked": "...", "corrected": "..."}"""
 
+FEEDBACK_EMOJI = "🚩"
+
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
+intents.reactions = True                     # 이모지 반응 감지 권한 활성화
 
 bot = commands.Bot(command_prefix='!', intents=intents)   # 봇 객체 생성
 
