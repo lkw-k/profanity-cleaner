@@ -6,6 +6,7 @@ import json                         # JSON 파싱
 import torch                        # PyTorch 버트 모델이라 파이토치 사용해야함
 from transformers import AutoTokenizer, AutoModelForSequenceClassification  # kcbert 모델 불러오기
 from groq import Groq
+import database
 
 
 
@@ -48,7 +49,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)   # 봇 객체 생성
 
 def is_profanity(text: str) -> bool:
     """kcbert로 비속어 여부 판정. 비속어면 True"""
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=128)  # 텍스트 토큰화
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)  # 텍스트 토큰화
     with torch.no_grad():  # 그래디언트 계산 비활성화
         outputs = model(**inputs)  # 모델에 입력 전달
     pred = torch.argmax(outputs.logits, dim=1).item()
@@ -70,6 +71,7 @@ def clean_with_groq(text: str) -> dict:
 
 @bot.event
 async def on_ready():
+    database.init_db()
     print(f"봇 로그인 성공 : {bot.user.name}")   # 봇이 로그인되면 콘솔에 메시지 출력
 
 @bot.event
