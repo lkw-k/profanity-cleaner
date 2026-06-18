@@ -79,7 +79,10 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
-    print(f"감지: {message.content}") 
+    if message.content.startswith(bot.command_prefix):
+        await bot.process_commands(message)
+        return
+    print(f"감지: {message.content}")
     # KcBERT 비속어 판정
     if is_profanity(message.content):
         try:
