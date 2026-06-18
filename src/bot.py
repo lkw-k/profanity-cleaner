@@ -79,8 +79,9 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
-    if message.content.startswith(bot.command_prefix):
-        await bot.process_commands(message)
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        await bot.invoke(ctx)
         return
     print(f"감지: {message.content}")
     # KcBERT 비속어 판정
@@ -97,7 +98,6 @@ async def on_message(message):
         except Exception as e:
             print(f"Groq 호출 실패: {e}")
             await message.channel.send("교정 중 오류가 발생했어요")
-    await bot.process_commands(message)
 
 
 @bot.event
