@@ -35,7 +35,8 @@ corrected: 문맥·감정을 유지하며 비속어를 순화된 표현으로 �
 
 JSON으로만 응답: {"masked": "...", "corrected": "..."}"""
 
-FEEDBACK_EMOJI = "🚩"
+FEEDBACK_EMOJI = "🚩"   # 욕설인데 감지 못한 경우
+FALSE_POS_EMOJI = "✅"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
 
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
@@ -102,25 +103,37 @@ async def on_message(message):
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
         return
-    if str(payload.emoji) != FEEDBACK_EMOJI:
-        return
-    channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
-    message = await channel.fetch_message(payload.message_id)
-    if message.author == bot.user:
-        return
-    if database.is_already_saved(str(payload.message_id)):
+    emoji = str(payload.emoji)
+    if emoji not in (FEEDBACK_EMOJI, FALSE_POS_EMOJI):
         return
     try:
-        result = clean_with_groq(message.content)
-        reply = (
-            f"원문: {result['masked']}\n"
-            f"교정: {result['corrected']}"
-        )
-        await message.reply(reply)
+        channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+
+        if emoji == FEEDBACK_EMOJI:
+            # 🚩: 욕설인데 봇이 감지 못한 메시지 → label=1 저장
+            if message.author == bot.user:
+                return
+            if database.is_already_saved(str(payload.message_id)):
+                return
+            result = clean_with_groq(message.content)
+            await message.reply(f"원문: {result['masked']}\n교정: {result['corrected']}")
+            database.save_profanity(str(payload.message_id), message.content)
+
+        elif emoji == FALSE_POS_EMOJI:
+            # ✅: 봇의 교정 답글에 달면 오탐 피드백 → 원본 메시지 label=0 저장
+            if message.author != bot.user:
+                return
+            if not message.reference:
+                return
+            original = await channel.fetch_message(message.reference.message_id)
+            if database.is_already_saved(str(original.id)):
+                return
+            database.save_false_positive(str(original.id), original.content)
+            await message.add_reaction("👍")
+
     except Exception as e:
-        print(f"Groq 호출 실패: {e}")
-        await message.channel.send("교정 중 오류가 발생했어요")
-    database.save_profanity(str(payload.message_id), message.content)
+        print(f"반응 처리 오류: {e}")
 
 
 @bot.command(name='ping')

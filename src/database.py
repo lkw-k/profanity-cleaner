@@ -31,3 +31,12 @@ def save_profanity(message_id: str, content: str):
     )
     con.commit()
     con.close()
+
+def save_false_positive(message_id: str, content: str):
+    con = sqlite3.connect(DB_PATH)
+    con.execute(
+        "INSERT OR IGNORE INTO feedback (message_id, content, label, created_at) VALUES (?,?,0,?)",
+        (message_id, content, datetime.utcnow().isoformat())
+    )
+    con.commit()
+    con.close()
