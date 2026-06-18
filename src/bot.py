@@ -1,10 +1,12 @@
-import os                           # 환경변수 읽기
-import discord                      # 디스코드 라이브러리
-from discord.ext import commands    # 디스코드 봇 명령어
-from dotenv import load_dotenv      # .env 파일 읽기
-import json                         # JSON 파싱
-import torch                        # PyTorch 버트 모델이라 파이토치 사용해야함
-from transformers import AutoTokenizer, AutoModelForSequenceClassification  # kcbert 모델 불러오기
+import os
+import asyncio
+import discord
+from discord.ext import commands
+from dotenv import load_dotenv
+import json
+import torch
+from torch.optim import AdamW
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from groq import Groq
 import database
 
@@ -37,6 +39,24 @@ JSON으로만 응답: {"masked": "...", "corrected": "..."}"""
 
 FEEDBACK_EMOJI = "🏴"   # 욕설인데 감지 못한 경우
 FALSE_POS_EMOJI = "🏳️"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
+
+_is_training = False
+
+def _make_bar(current, total, width=20):
+    filled = int(width * current / total)
+    bar = "█" * filled + "░" * (width - filled)
+    pct = 100 * current // total
+    return f"학습 중... [{bar}] {pct}% ({current}/{total} 에폭)"
+
+def _run_epoch(texts, labels, optimizer):
+    model.train()
+    inputs = tokenizer(texts, return_tensors='pt', truncation=True, padding=True, max_length=128)
+    label_tensor = torch.tensor(labels)
+    optimizer.zero_grad()
+    outputs = model(**inputs, labels=label_tensor)
+    outputs.loss.backward()
+    optimizer.step()
+    model.eval()
 
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
@@ -80,7 +100,7 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
-    if not message.content.startswith('!'):
+    if not message.content.startswith('!') and not _is_training:
         print(f"감지: {message.content}")
         # KcBERT 비속어 판정
         if is_profanity(message.content):
@@ -134,6 +154,38 @@ async def on_raw_reaction_add(payload):
 
     except Exception as e:
         print(f"반응 처리 오류: {e}")
+
+
+@bot.command(name='train')
+async def train_cmd(ctx):
+    global _is_training
+    if _is_training:
+        await ctx.send("이미 학습 중입니다.")
+        return
+
+    rows = database.get_all_feedback()
+    if not rows:
+        await ctx.send("학습 데이터가 없습니다. 🏴 또는 🏳️ 피드백을 먼저 달아주세요.")
+        return
+
+    texts = [r[0] for r in rows]
+    labels = [r[1] for r in rows]
+    EPOCHS = 3
+    optimizer = AdamW(model.parameters(), lr=2e-5)
+
+    _is_training = True
+    msg = await ctx.send(_make_bar(0, EPOCHS))
+    loop = asyncio.get_event_loop()
+    try:
+        for epoch in range(EPOCHS):
+            await loop.run_in_executor(None, lambda: _run_epoch(texts, labels, optimizer))
+            await msg.edit(content=_make_bar(epoch + 1, EPOCHS))
+        await msg.edit(content=f"✅ 학습 완료! 데이터 {len(rows)}개 · {EPOCHS} 에폭")
+    except Exception as e:
+        await msg.edit(content=f"❌ 학습 실패: {e}")
+        print(f"학습 오류: {e}")
+    finally:
+        _is_training = False
 
 
 @bot.command(name='ping')

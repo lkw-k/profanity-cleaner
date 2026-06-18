@@ -32,6 +32,12 @@ def save_profanity(message_id: str, content: str):
     con.commit()
     con.close()
 
+def get_all_feedback():
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute("SELECT content, label FROM feedback").fetchall()
+    con.close()
+    return rows
+
 def save_false_positive(message_id: str, content: str):
     con = sqlite3.connect(DB_PATH)
     con.execute(
