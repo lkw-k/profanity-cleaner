@@ -79,25 +79,23 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
-    ctx = await bot.get_context(message)
-    if ctx.valid:
-        await bot.invoke(ctx)
-        return
-    print(f"감지: {message.content}")
-    # KcBERT 비속어 판정
-    if is_profanity(message.content):
-        try:
-            # Groq에 마스킹+교정 요청
-            result = clean_with_groq(message.content)
-            reply = (
-                f"원문: {result['masked']}\n"
-                f"교정: {result['corrected']}"
-            )
-            # 원본 메시지에 답글로 응답
-            await message.reply(reply)
-        except Exception as e:
-            print(f"Groq 호출 실패: {e}")
-            await message.channel.send("교정 중 오류가 발생했어요")
+    if not message.content.startswith('!'):
+        print(f"감지: {message.content}")
+        # KcBERT 비속어 판정
+        if is_profanity(message.content):
+            try:
+                # Groq에 마스킹+교정 요청
+                result = clean_with_groq(message.content)
+                reply = (
+                    f"원문: {result['masked']}\n"
+                    f"교정: {result['corrected']}"
+                )
+                # 원본 메시지에 답글로 응답
+                await message.reply(reply)
+            except Exception as e:
+                print(f"Groq 호출 실패: {e}")
+                await message.channel.send("교정 중 오류가 발생했어요")
+    await bot.process_commands(message)
 
 
 @bot.event
