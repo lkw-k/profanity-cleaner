@@ -35,8 +35,8 @@ corrected: 문맥·감정을 유지하며 비속어를 순화된 표현으로 �
 
 JSON으로만 응답: {"masked": "...", "corrected": "..."}"""
 
-FEEDBACK_EMOJI = "🚩"   # 욕설인데 감지 못한 경우
-FALSE_POS_EMOJI = "✅"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
+FEEDBACK_EMOJI = "🏴"   # 욕설인데 감지 못한 경우
+FALSE_POS_EMOJI = "🏳️"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
 
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
