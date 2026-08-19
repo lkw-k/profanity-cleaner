@@ -48,7 +48,7 @@
 pip install discord.py python-dotenv torch transformers groq
 ```
 
-### 3. 봇 실행
+### 2. 봇 실행
 
 ```bash
 python src/bot.py
