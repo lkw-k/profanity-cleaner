@@ -77,13 +77,16 @@ def clean_with_groq(text: str) -> dict:
     if text in _groq_cache:
         return _groq_cache[text]
     response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="qwen/qwen3.6-27b",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text}
         ],
         response_format={"type": "json_object"},
         temperature=0.3,
+        # 추론을 끄지 않으면 추론 토큰이 max_tokens를 다 먹어 JSON이 잘린다.
+        # 끄면 출력이 26~68토큰으로 떨어진다.
+        reasoning_effort="none",
         max_tokens=200,
     )
     result_text = response.choices[0].message.content
