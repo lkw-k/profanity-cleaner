@@ -129,7 +129,11 @@ async def mask_and_repost(message, result):
         wait=True,
     )
     _masked_origin[posted.id] = (message.id, message.content)
-    await message.delete()
+    try:
+        await message.delete()
+    except discord.NotFound:
+        # 사용자가 먼저 지운 경우. 원본이 사라진 건 어차피 목적이므로 계속 진행한다.
+        pass
     await message.channel.send(result["corrected"], reference=posted)
 
 

@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# 버퍼링되면 print 로그가 journalctl에 즉시 안 뜬다.
+Environment=PYTHONUNBUFFERED=1
 User=__USER__
 WorkingDirectory=/home/__USER__/profanity-cleaner
 ExecStart=/home/__USER__/profanity-cleaner/.venv/bin/python src/bot.py
