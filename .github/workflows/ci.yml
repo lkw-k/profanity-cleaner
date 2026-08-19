@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # public 저장소이므로, 비밀값이나 디스코드 사용자 메시지가 담긴 DB가
+      # 커밋되면 빌드를 실패시킨다.
+      - name: 비밀값·데이터 파일 커밋 차단
+        run: |
+          leaked=$(git ls-files -- '.env' '*.db')
+          if [ -n "$leaked" ]; then
+            echo "::error::커밋되면 안 되는 파일이 추적 중입니다: $leaked"
+            exit 1
+          fi
+          # 플레이스홀더(your_token_here 등)가 걸리지 않도록 실제 토큰 형태로 좁힌다.
+          # Groq: gsk_ + 40자 이상 / Discord 봇 토큰: 점으로 구분된 3부분
+          if git grep -InE 'gsk_[A-Za-z0-9]{40,}|[A-Za-z0-9_-]{24,28}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}' \
+               -- . ':!.github/workflows/ci.yml'; then
+            echo "::error::위 파일에 실제 API 키/토큰으로 보이는 값이 있습니다"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # 프로젝트 의존성은 설치하지 않는다. pyproject가 torch를 CUDA 인덱스에
+      # 고정해둬서 러너에 2.5GB 이상을 받게 되는데, 테스트 대상인 database.py는
+      # 표준 라이브러리 sqlite3만 사용한다.
+      - run: pip install pytest==9.1.1 ruff==0.16.3
+      - run: ruff check src tests
+      - run: python -m compileall -q src
+      - run: pytest -q
