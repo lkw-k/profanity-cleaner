@@ -75,3 +75,62 @@ python src/bot.py
 | 명령어 | 설명 |
 |---|---|
 | `!ping` | 봇 응답 확인 (`pong` 반환) |
+
+## 리눅스 서버 배포 (systemd)
+
+Discord 봇은 서버에서 Discord로 나가는 연결만 사용합니다. 열어야 할 포트나 도메인, 리버스 프록시가 필요 없고 프로세스를 계속 띄워두기만 하면 됩니다.
+
+### 1. 서버에 코드 받기
+
+```bash
+ssh 계정@학교서버주소
+git clone https://github.com/사용자명/profanity-cleaner.git
+cd profanity-cleaner
+```
+
+### 2. 가상환경 + 의존성 (CPU 전용)
+
+`pyproject.toml`은 CUDA용 torch를 지정하므로, GPU가 없는 서버에서는 `uv sync` 대신 CPU 빌드를 직접 설치합니다.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # uv 없을 때만
+uv venv --python 3.11
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install "discord.py" python-dotenv "transformers<4.50" groq
+```
+
+### 3. 환경변수
+
+```bash
+cp .env.example .env
+nano .env     # 토큰 입력
+chmod 600 .env
+```
+
+### 4. 동작 확인
+
+```bash
+.venv/bin/python src/bot.py
+```
+
+`봇 로그인 성공 : ...`이 뜨면 Ctrl+C로 종료합니다. 최초 실행 시 KcBERT 모델(약 500MB)을 `~/.cache/huggingface`에 내려받습니다.
+
+### 5. systemd 등록
+
+```bash
+sed "s/__USER__/$USER/g" deploy/profanity-cleaner.service | sudo tee /etc/systemd/system/profanity-cleaner.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now profanity-cleaner
+```
+
+`WorkingDirectory`가 `/home/$USER/profanity-cleaner` 기준이므로, 다른 경로에 클론했다면 유닛 파일의 경로를 수정해야 합니다.
+
+### 6. 운영
+
+```bash
+sudo systemctl status profanity-cleaner    # 상태 확인
+sudo journalctl -u profanity-cleaner -f    # 로그 실시간 확인
+sudo systemctl restart profanity-cleaner   # 재시작
+
+git pull && sudo systemctl restart profanity-cleaner   # 코드 업데이트
+```

@@ -233,3 +233,5 @@ data/*.tsv
 
 # Jupyter
 .ipynb_checkpoints/
+# 프로젝트 로컬 데이터
+feedback.db

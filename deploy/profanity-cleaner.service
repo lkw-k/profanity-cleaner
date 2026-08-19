@@ -1,0 +1,17 @@
+[Unit]
+Description=Profanity Cleaner Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=/home/__USER__/profanity-cleaner
+ExecStart=/home/__USER__/profanity-cleaner/.venv/bin/python src/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
