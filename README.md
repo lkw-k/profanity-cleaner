@@ -60,6 +60,12 @@ python src/bot.py
 
 - `Message Content Intent` 활성화 (Discord Developer Portal > Bot 설정)
 - 채널 메시지 읽기 / 쓰기 권한
+- `Manage Messages` — 욕설 원본 메시지 삭제
+- `Manage Webhooks` — 작성자 명의로 마스킹본 재게시
+
+`Manage Messages` / `Manage Webhooks`가 없으면 원본을 지우지 못하고, 기존처럼 답글로만 마스킹·교정 결과를 알립니다.
+
+스레드 안에서는 웹훅 재게시가 동작하지 않고 답글로 폴백합니다. DM도 마찬가지입니다.
 
 ## 명령어
 

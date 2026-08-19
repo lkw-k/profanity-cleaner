@@ -30,15 +30,23 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 _groq_cache: dict[str, dict] = {}
 
 # Groq에 보낼 프롬프트
-SYSTEM_PROMPT = """한국어 비속어 정제 도구. 출력에 욕설·비속어를 절대 포함하지 마.
+SYSTEM_PROMPT = """한국어 비속어 마스킹/교정 도구.
 
-masked: 비속어를 같은 글자 수의 *로만 대체. 예) "아 시발 진짜" → "아 ** 진짜"
-corrected: 문맥·감정을 유지하며 비속어를 순화된 표현으로 대체. 맞춤법도 정리. 예) "씨발 대박이다" → "와 대박이다"
+masked: 비속어 글자만 같은 개수의 *로 바꾼다. 조사·어미는 남긴다. 비속어를 하나도 빠뜨리지 마라.
+corrected: 비속어를 순화하고 맞춤법을 정리한다. 문맥은 유지.
+
+예) "야 이 개새끼야 시발 존나 짜증나"
+{"masked": "야 이 ***야 ** ** 짜증나", "corrected": "야 너 정말 짜증나"}
 
 JSON으로만 응답: {"masked": "...", "corrected": "..."}"""
 
 FEEDBACK_EMOJI = "🏴"   # 욕설인데 감지 못한 경우
 FALSE_POS_EMOJI = "🏳️"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
+
+WEBHOOK_NAME = "profanity-cleaner"
+_webhook_cache: dict[int, discord.Webhook] = {}
+# 웹훅 재게시 메시지 id -> (원본 메시지 id, 원본 내용). 원본은 삭제되므로 오탐 피드백용으로 보관.
+_masked_origin: dict[int, tuple[int, str]] = {}
 
 _is_training = False
 
@@ -94,6 +102,49 @@ def clean_with_groq(text: str) -> dict:
     _groq_cache[text] = result
     return result
 
+async def _get_webhook(channel):
+    """채널 웹훅을 확보한다. 매번 만들면 채널 웹훅 상한(10개)에 걸리므로 캐싱."""
+    if channel.id in _webhook_cache:
+        return _webhook_cache[channel.id]
+    for wh in await channel.webhooks():
+        if wh.name == WEBHOOK_NAME:
+            _webhook_cache[channel.id] = wh
+            return wh
+    wh = await channel.create_webhook(name=WEBHOOK_NAME)
+    _webhook_cache[channel.id] = wh
+    return wh
+
+
+async def mask_and_repost(message, result):
+    """원본을 마스킹본으로 갈아끼우고 교정문을 답글로 단다.
+
+    작성자 메시지는 봇이 수정할 수 없어 웹훅 재게시 + 삭제로 흉내낸다.
+    재게시가 성공한 뒤에 삭제한다. 순서를 뒤집으면 실패 시 글이 영구 소실된다.
+    """
+    webhook = await _get_webhook(message.channel)
+    posted = await webhook.send(
+        result["masked"],
+        username=message.author.display_name,
+        avatar_url=message.author.display_avatar.url,
+        wait=True,
+    )
+    _masked_origin[posted.id] = (message.id, message.content)
+    await message.delete()
+    await message.channel.send(result["corrected"], reference=posted)
+
+
+async def handle_profanity(message, result):
+    """마스킹 재게시를 시도하고, 권한이 없으면 기존 답글 방식으로 폴백한다."""
+    try:
+        await mask_and_repost(message, result)
+    except discord.Forbidden:
+        # Manage Messages / Manage Webhooks 권한이 없는 채널
+        print(f"권한 부족으로 답글 폴백: #{message.channel}")
+        await message.reply(
+            f"원문: {result['masked']}\n"
+            f"교정: {result['corrected']}"
+        )
+
 @bot.event
 async def on_ready():
     database.init_db()
@@ -103,6 +154,9 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:              # 봇 자신의 메시지는 무시
         return
+    # 마스킹 재게시본은 author가 봇이 아니라 웹훅이라 위 조건에 안 걸린다. 재감지 방지.
+    if message.webhook_id and message.webhook_id in {w.id for w in _webhook_cache.values()}:
+        return
     if not message.content.startswith('!') and not _is_training:
         print(f"감지: {message.content}")
         # KcBERT 비속어 판정
@@ -110,15 +164,11 @@ async def on_message(message):
             try:
                 # Groq에 마스킹+교정 요청
                 result = clean_with_groq(message.content)
-                reply = (
-                    f"원문: {result['masked']}\n"
-                    f"교정: {result['corrected']}"
-                )
-                # 원본 메시지에 답글로 응답
-                await message.reply(reply)
             except Exception as e:
                 print(f"Groq 호출 실패: {e}")
                 await message.channel.send("교정 중 오류가 발생했어요")
+            else:
+                await handle_profanity(message, result)
     await bot.process_commands(message)
 
 
@@ -140,8 +190,9 @@ async def on_raw_reaction_add(payload):
             if database.is_already_saved(str(payload.message_id)):
                 return
             result = clean_with_groq(message.content)
-            await message.reply(f"원문: {result['masked']}\n교정: {result['corrected']}")
+            # 재게시 과정에서 원본이 삭제되므로 저장을 먼저 한다.
             database.save_profanity(str(payload.message_id), message.content)
+            await handle_profanity(message, result)
 
         elif emoji == FALSE_POS_EMOJI:
             # ✅: 봇의 교정 답글에 달면 오탐 피드백 → 원본 메시지 label=0 저장
@@ -149,10 +200,17 @@ async def on_raw_reaction_add(payload):
                 return
             if not message.reference:
                 return
-            original = await channel.fetch_message(message.reference.message_id)
-            if database.is_already_saved(str(original.id)):
+            # 원본은 마스킹 재게시 과정에서 삭제됐으므로 보관해둔 값을 쓴다.
+            origin = _masked_origin.get(message.reference.message_id)
+            if origin is not None:
+                original_id, original_content = origin
+            else:
+                # 폴백(답글만) 경로에서는 원본이 살아있다.
+                original = await channel.fetch_message(message.reference.message_id)
+                original_id, original_content = original.id, original.content
+            if database.is_already_saved(str(original_id)):
                 return
-            database.save_false_positive(str(original.id), original.content)
+            database.save_false_positive(str(original_id), original_content)
             await message.add_reaction("👍")
 
     except Exception as e:
