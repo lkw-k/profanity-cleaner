@@ -48,15 +48,6 @@
 pip install discord.py python-dotenv torch transformers groq
 ```
 
-### 2. 환경변수 설정
-
-프로젝트 루트에 `.env` 파일을 만들고 아래 값을 입력합니다.
-
-```env
-DISCORD_BOT_TOKEN=your_discord_bot_token
-GROQ_API_KEY=your_groq_api_key
-```
-
 ### 3. 봇 실행
 
 ```bash
