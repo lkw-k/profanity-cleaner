@@ -52,6 +52,10 @@ JSON으로만 응답: {"masked": "...", "corrected": "..."}"""
 
 FEEDBACK_EMOJI = "🏴"   # 욕설인데 감지 못한 경우
 FALSE_POS_EMOJI = "🏳️"  # 욕설 아닌데 오탐된 경우 (봇 교정 답글에 달기)
+# 같은 이모지라도 Discord가 이형 선택자(U+FE0F)를 붙여 보내기도, 빼고 보내기도 한다.
+# 문자열을 그대로 비교하면 반응이 조용히 무시되므로 떼고 비교한다.
+_FEEDBACK_KEY = FEEDBACK_EMOJI.replace('️', '')
+_FALSE_POS_KEY = FALSE_POS_EMOJI.replace('️', '')
 
 WEBHOOK_NAME = "profanity-cleaner"
 _webhook_cache: dict[int, discord.Webhook] = {}
@@ -190,33 +194,54 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
+async def _reject(message, reason):
+    """피드백을 받았지만 처리하지 않았음을 알린다.
+
+    조용히 return하면 사용자는 반응이 씹혔는지 규칙을 틀렸는지 알 수 없다.
+    """
+    print(f"피드백 무시: {reason} (msg={message.id})")
+    try:
+        await message.add_reaction("❌")
+    except discord.HTTPException:
+        pass
+
+
 @bot.event
 async def on_raw_reaction_add(payload):
     if payload.user_id == bot.user.id:
         return
-    emoji = str(payload.emoji)
-    if emoji not in (FEEDBACK_EMOJI, FALSE_POS_EMOJI):
+    emoji = str(payload.emoji).replace('️', '')
+    if emoji not in (_FEEDBACK_KEY, _FALSE_POS_KEY):
         return
+    print(f"피드백 반응 수신: {[hex(ord(c)) for c in str(payload.emoji)]} msg={payload.message_id}")
     try:
         channel = bot.get_channel(payload.channel_id) or await bot.fetch_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
 
-        if emoji == FEEDBACK_EMOJI:
-            # 🚩: 욕설인데 봇이 감지 못한 메시지 → label=1 저장
+        if emoji == _FEEDBACK_KEY:
+            # 🏴: 욕설인데 봇이 감지 못한 메시지 → label=1 저장
             if message.author == bot.user:
+                await _reject(message, "🏴는 원본 메시지에 답니다. 오탐 신고라면 이 답글에 🏳️")
+                return
+            if message.webhook_id:
+                # 마스킹 재게시본. 내용이 이미 "***"라 학습 데이터로 쓸 수 없다.
+                await _reject(message, "마스킹 재게시본에는 🏴를 달 수 없습니다")
                 return
             if database.is_already_saved(str(payload.message_id)):
+                await _reject(message, "이미 저장된 메시지")
                 return
             result = clean_with_groq(message.content)
             # 재게시 과정에서 원본이 삭제되므로 저장을 먼저 한다.
             database.save_profanity(str(payload.message_id), message.content)
             await handle_profanity(message, result)
 
-        elif emoji == FALSE_POS_EMOJI:
-            # ✅: 봇의 교정 답글에 달면 오탐 피드백 → 원본 메시지 label=0 저장
+        elif emoji == _FALSE_POS_KEY:
+            # 🏳️: 봇의 교정 답글에 달면 오탐 피드백 → 원본 메시지 label=0 저장
             if message.author != bot.user:
+                await _reject(message, "🏳️는 봇의 교정 답글에 답니다")
                 return
             if not message.reference:
+                await _reject(message, "답글이 아니라 원본을 찾을 수 없습니다")
                 return
             # 원본은 마스킹 재게시 과정에서 삭제됐으므로 보관해둔 값을 쓴다.
             origin = _masked_origin.get(message.reference.message_id)
@@ -225,8 +250,13 @@ async def on_raw_reaction_add(payload):
             else:
                 # 폴백(답글만) 경로에서는 원본이 살아있다.
                 original = await channel.fetch_message(message.reference.message_id)
+                if original.webhook_id:
+                    # 재시작으로 _masked_origin이 비었다. 재게시본은 "***"라 학습에 못 쓴다.
+                    await _reject(message, "봇 재시작으로 원본 내용을 잃었습니다")
+                    return
                 original_id, original_content = original.id, original.content
             if database.is_already_saved(str(original_id)):
+                await _reject(message, "이미 저장된 메시지")
                 return
             database.save_false_positive(str(original_id), original_content)
             await message.add_reaction("👍")
