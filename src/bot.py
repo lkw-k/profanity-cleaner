@@ -20,9 +20,12 @@ GROQ_API_KEY = os.getenv('GROQ_API_KEY')   # 환경변수에서 Groq API 키 읽
 
 #kcbert 모델 fhem (봇 시작할때 1회 실행)
 MODEL_NAME = "illimax/kcbert-profanity"
-print("모델 불러오는 중...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)   # 토크나이저 불러오기
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)  # 모델 불러오기
+TRAINED_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'trained')
+# !train으로 저장해둔 모델이 있으면 그걸 쓴다. 없으면 허깅페이스 원본.
+MODEL_SOURCE = TRAINED_PATH if os.path.isdir(TRAINED_PATH) else MODEL_NAME
+print(f"모델 불러오는 중... ({MODEL_SOURCE})")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_SOURCE)   # 토크나이저 불러오기
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_SOURCE)  # 모델 불러오기
 model.eval()  # 모델을 평가 모드로 설정 
 print("모델 불러오기 완료")
 
@@ -65,6 +68,10 @@ def _run_epoch(texts, labels, optimizer):
     outputs.loss.backward()
     optimizer.step()
     model.eval()
+
+def _save_model():
+    model.save_pretrained(TRAINED_PATH)
+    tokenizer.save_pretrained(TRAINED_PATH)
 
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
@@ -245,7 +252,10 @@ async def train_cmd(ctx):
         for epoch in range(EPOCHS):
             await loop.run_in_executor(None, lambda: _run_epoch(texts, labels, optimizer))
             await msg.edit(content=_make_bar(epoch + 1, EPOCHS))
-        await msg.edit(content=f"✅ 학습 완료! 데이터 {len(rows)}개 · {EPOCHS} 에폭")
+        # 저장하지 않으면 봇 재시작 시 학습 결과가 사라진다.
+        await msg.edit(content="학습 완료. 모델 저장 중...")
+        await loop.run_in_executor(None, _save_model)
+        await msg.edit(content=f"✅ 학습 완료! 데이터 {len(rows)}개 · {EPOCHS} 에폭 · 모델 저장됨")
     except Exception as e:
         await msg.edit(content=f"❌ 학습 실패: {e}")
         print(f"학습 오류: {e}")
