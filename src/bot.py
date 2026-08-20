@@ -7,6 +7,7 @@ import json
 import torch
 from torch.optim import AdamW
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from safetensors.torch import load as load_safetensors
 from groq import Groq
 import database
 
@@ -21,12 +22,18 @@ GROQ_API_KEY = os.getenv('GROQ_API_KEY')   # 환경변수에서 Groq API 키 읽
 #kcbert 모델 fhem (봇 시작할때 1회 실행)
 MODEL_NAME = "illimax/kcbert-profanity"
 TRAINED_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'trained')
-# !train으로 저장해둔 모델이 있으면 그걸 쓴다. 없으면 허깅페이스 원본.
-MODEL_SOURCE = TRAINED_PATH if os.path.isdir(TRAINED_PATH) else MODEL_NAME
-print(f"모델 불러오는 중... ({MODEL_SOURCE})")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_SOURCE)   # 토크나이저 불러오기
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_SOURCE)  # 모델 불러오기
-model.eval()  # 모델을 평가 모드로 설정 
+WEIGHTS_FILE = os.path.join(TRAINED_PATH, 'model.safetensors')
+print("모델 불러오는 중...")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)   # 토크나이저 불러오기 (학습해도 안 바뀜)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)  # 모델 불러오기
+if os.path.isfile(WEIGHTS_FILE):
+    # from_pretrained(TRAINED_PATH)로 읽으면 safetensors가 이 파일을 mmap으로 붙잡아
+    # 다음 !train의 저장이 윈도우에서 os error 1224로 실패한다.
+    # bytes로 읽어 넣으면 파일 핸들이 남지 않는다.
+    with open(WEIGHTS_FILE, 'rb') as fh:
+        model.load_state_dict(load_safetensors(fh.read()))
+    print(f"학습된 가중치 적용: {WEIGHTS_FILE}")
+model.eval()  # 모델을 평가 모드로 설정
 print("모델 불러오기 완료")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
@@ -70,8 +77,8 @@ def _run_epoch(texts, labels, optimizer):
     model.eval()
 
 def _save_model():
+    # 토크나이저는 학습으로 바뀌지 않으므로 가중치만 저장한다.
     model.save_pretrained(TRAINED_PATH)
-    tokenizer.save_pretrained(TRAINED_PATH)
 
 intents = discord.Intents.default()          # 디스코드 봇의 권한 설정
 intents.message_content = True               # 메시지 내용 읽기 권한 활성화
@@ -235,13 +242,15 @@ async def train_cmd(ctx):
         await ctx.send("이미 학습 중입니다.")
         return
 
-    rows = database.get_all_feedback()
+    # 이미 학습한 데이터를 다시 학습시키면 loss가 0인데도 로짓만 커져 오탐이 늘어난다.
+    rows = database.get_untrained_feedback()
     if not rows:
-        await ctx.send("학습 데이터가 없습니다. 🏴 또는 🏳️ 피드백을 먼저 달아주세요.")
+        await ctx.send("새로 학습할 데이터가 없습니다. 🏴 또는 🏳️ 피드백을 먼저 달아주세요.")
         return
 
-    texts = [r[0] for r in rows]
-    labels = [r[1] for r in rows]
+    message_ids = [r[0] for r in rows]
+    texts = [r[1] for r in rows]
+    labels = [r[2] for r in rows]
     EPOCHS = 3
     optimizer = AdamW(model.parameters(), lr=2e-5)
 
@@ -255,7 +264,9 @@ async def train_cmd(ctx):
         # 저장하지 않으면 봇 재시작 시 학습 결과가 사라진다.
         await msg.edit(content="학습 완료. 모델 저장 중...")
         await loop.run_in_executor(None, _save_model)
-        await msg.edit(content=f"✅ 학습 완료! 데이터 {len(rows)}개 · {EPOCHS} 에폭 · 모델 저장됨")
+        # 저장이 끝난 뒤에 표시한다. 먼저 표시하면 저장 실패 시 데이터를 영영 못 쓴다.
+        database.mark_trained(message_ids)
+        await msg.edit(content=f"✅ 학습 완료! 새 데이터 {len(rows)}개 · {EPOCHS} 에폭 · 모델 저장됨")
     except Exception as e:
         await msg.edit(content=f"❌ 학습 실패: {e}")
         print(f"학습 오류: {e}")

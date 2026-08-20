@@ -94,6 +94,54 @@ def test_get_all_feedback_empty(db):
     assert database.get_all_feedback() == []
 
 
+def test_get_untrained_feedback_returns_id_content_label(db):
+    database.save_profanity("910", "욕설 메시지")
+    database.save_false_positive("911", "정상 메시지")
+
+    rows = database.get_untrained_feedback()
+    assert sorted(rows) == sorted([("910", "욕설 메시지", 1), ("911", "정상 메시지", 0)])
+
+
+def test_mark_trained_excludes_rows_from_next_call(db):
+    database.save_profanity("920", "첫 학습분")
+    database.mark_trained(["920"])
+
+    assert database.get_untrained_feedback() == []
+
+
+def test_mark_trained_only_marks_given_ids(db):
+    """학습 도중 들어온 피드백이 학습 없이 trained 처리되면 안 된다."""
+    database.save_profanity("930", "학습에 쓴 것")
+    ids = [r[0] for r in database.get_untrained_feedback()]
+
+    database.save_profanity("931", "학습 중 새로 들어온 것")
+    database.mark_trained(ids)
+
+    assert database.get_untrained_feedback() == [("931", "학습 중 새로 들어온 것", 1)]
+
+
+def test_init_db_adds_trained_column_to_existing_db(tmp_path, monkeypatch):
+    """trained 컬럼이 없던 기존 DB도 마이그레이션돼야 한다."""
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.execute("""
+        CREATE TABLE feedback (
+            message_id  TEXT PRIMARY KEY,
+            content     TEXT NOT NULL,
+            label       INTEGER DEFAULT 1,
+            created_at  TEXT NOT NULL
+        )
+    """)
+    con.execute("INSERT INTO feedback VALUES ('940','기존 데이터',1,'2026-01-01')")
+    con.commit()
+    con.close()
+
+    monkeypatch.setattr(database, "DB_PATH", str(path))
+    database.init_db()
+
+    assert database.get_untrained_feedback() == [("940", "기존 데이터", 1)]
+
+
 def test_label_is_not_updated_when_message_id_already_exists(db):
     """INSERT OR IGNORE라 라벨이 뒤집히지 않는다. 현재 동작을 고정해둔다."""
     database.save_profanity("888", "메시지")
