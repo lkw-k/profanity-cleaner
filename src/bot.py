@@ -33,8 +33,11 @@ if os.path.isfile(WEIGHTS_FILE):
     with open(WEIGHTS_FILE, 'rb') as fh:
         model.load_state_dict(load_safetensors(fh.read()))
     print(f"학습된 가중치 적용: {WEIGHTS_FILE}")
+# 학습된 가중치까지 올린 뒤 한 번에 옮긴다. 파라미터마다 host->device 복사가 따로 일어나지 않는다.
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(DEVICE)
 model.eval()  # 모델을 평가 모드로 설정
-print("모델 불러오기 완료")
+print(f"모델 불러오기 완료 (device={DEVICE})")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 _groq_cache: dict[str, dict] = {}
@@ -72,8 +75,8 @@ def _make_bar(current, total, width=20):
 
 def _run_epoch(texts, labels, optimizer):
     model.train()
-    inputs = tokenizer(texts, return_tensors='pt', truncation=True, padding=True, max_length=128)
-    label_tensor = torch.tensor(labels)
+    inputs = tokenizer(texts, return_tensors='pt', truncation=True, padding=True, max_length=128).to(DEVICE)
+    label_tensor = torch.tensor(labels, device=DEVICE)
     optimizer.zero_grad()
     outputs = model(**inputs, labels=label_tensor)
     outputs.loss.backward()
@@ -92,7 +95,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)   # 봇 객체 생성
 
 def is_profanity(text: str) -> bool:
     """kcbert로 비속어 여부 판정. 비속어면 True"""
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)  # 텍스트 토큰화
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(DEVICE)  # 텍스트 토큰화
     with torch.no_grad():  # 그래디언트 계산 비활성화
         outputs = model(**inputs)  # 모델에 입력 전달
     pred = torch.argmax(outputs.logits, dim=1).item()
