@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kcbert-profanity</title>
+<style>
+  :root {
+    --bg: #fafafa; --fg: #1a1a1a; --muted: #666; --line: #ddd;
+    --card: #fff; --clean: #2f7d4f; --bad: #c0392b; --btn: #1a1a1a; --btn-fg: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141414; --fg: #eee; --muted: #999; --line: #333;
+      --card: #1e1e1e; --clean: #4caf7a; --bad: #e5604f; --btn: #eee; --btn-fg: #141414;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: .95rem; }
+  .sub a { color: inherit; }
+  textarea {
+    width: 100%; min-height: 96px; padding: 12px; font: inherit; resize: vertical;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg);
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--btn); background: var(--btn); color: var(--btn-fg);
+  }
+  button:disabled { opacity: .4; cursor: default; }
+  .ex {
+    background: transparent; color: var(--fg); border-color: var(--line);
+    padding: 4px 10px; font-size: .85rem;
+  }
+  #status { color: var(--muted); font-size: .9rem; margin-top: 16px; min-height: 1.5em; }
+  #result { margin-top: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  #result[hidden] { display: none; }
+  .verdict { font-size: 1.25rem; font-weight: 600; margin-bottom: 12px; }
+  .bar { display: grid; grid-template-columns: 72px 1fr 56px; gap: 8px; align-items: center; font-size: .9rem; margin: 4px 0; }
+  .track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0; transition: width .2s; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>kcbert-profanity</h1>
+  <p class="sub">한국어 문장이 욕설·혐오 표현인지 판정합니다. 모델: <a href="https://huggingface.co/illimax/kcbert-profanity" target="_blank">illimax/kcbert-profanity</a></p>
+
+  <textarea id="text" placeholder="문장을 입력하세요" maxlength="500"></textarea>
+  <div class="row">
+    <button id="run" disabled>판정</button>
+    <button class="ex">오늘 날씨 정말 좋다</button>
+    <button class="ex">아 시발 진짜 짜증나네</button>
+    <button class="ex">이 영화 생각보다 별로였어</button>
+    <button class="ex">너 같은 놈은 그냥 꺼져</button>
+  </div>
+
+  <div id="status">모델 불러오는 중... (처음 한 번 약 110MB)</div>
+
+  <div id="result" hidden>
+    <div class="verdict" id="verdict"></div>
+    <div class="bar"><span>정상</span><div class="track"><div class="fill" id="f0" style="background:var(--clean)"></div></div><span class="num" id="p0"></span></div>
+    <div class="bar"><span>욕설·혐오</span><div class="track"><div class="fill" id="f1" style="background:var(--bad)"></div></div><span class="num" id="p1"></span></div>
+  </div>
+
+  <footer>입력한 문장은 서버로 전송되지 않고 브라우저 안에서만 처리됩니다. 128토큰이 넘는 뒷부분은 무시됩니다.</footer>
+</main>
+
+<script type="module">
+  import { AutoTokenizer, AutoModelForSequenceClassification } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.6";
+
+  const MODEL_ID = "illimax/kcbert-profanity";
+  const $ = (id) => document.getElementById(id);
+  const text = $("text"), run = $("run"), status = $("status");
+
+  let tokenizer, model;
+  try {
+    [tokenizer, model] = await Promise.all([
+      AutoTokenizer.from_pretrained(MODEL_ID),
+      AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: "q8" }),
+    ]);
+    status.textContent = "";
+    run.disabled = false;
+  } catch (e) {
+    status.textContent = "모델을 불러오지 못했습니다: " + e.message;
+  }
+
+  async function classify() {
+    const value = text.value.trim();
+    if (!value || !model) return;
+    run.disabled = true;
+    const inputs = await tokenizer(value, { truncation: true, max_length: 128 });
+    const { logits } = await model(inputs);
+    const [a, b] = logits.data;
+    const m = Math.max(a, b);
+    const e0 = Math.exp(a - m), e1 = Math.exp(b - m);
+    const p0 = e0 / (e0 + e1), p1 = 1 - p0;
+
+    $("verdict").textContent = p1 >= 0.5 ? "욕설·혐오 표현입니다" : "정상 문장입니다";
+    $("verdict").style.color = p1 >= 0.5 ? "var(--bad)" : "var(--clean)";
+    $("p0").textContent = (p0 * 100).toFixed(1) + "%";
+    $("p1").textContent = (p1 * 100).toFixed(1) + "%";
+    $("f0").style.width = p0 * 100 + "%";
+    $("f1").style.width = p1 * 100 + "%";
+    $("result").hidden = false;
+    run.disabled = false;
+  }
+
+  run.addEventListener("click", classify);
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); classify(); }
+  });
+  document.querySelectorAll(".ex").forEach((btn) =>
+    btn.addEventListener("click", () => { text.value = btn.textContent; classify(); })
+  );
+</script>
+</body>
+</html>
