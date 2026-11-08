@@ -47,6 +47,10 @@
   .track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
   .fill { height: 100%; width: 0; transition: width .2s; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
+  #words { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+  #words[hidden] { display: none; }
+  #words .label { color: var(--muted); font-size: .85rem; margin-bottom: 4px; }
+  #words mark { background: var(--bad); color: #fff; padding: 0 3px; border-radius: 3px; }
   footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
 </style>
 </head>
@@ -70,6 +74,10 @@
     <div class="verdict" id="verdict"></div>
     <div class="bar"><span>정상</span><div class="track"><div class="fill" id="f0" style="background:var(--clean)"></div></div><span class="num" id="p0"></span></div>
     <div class="bar"><span>욕설·혐오</span><div class="track"><div class="fill" id="f1" style="background:var(--bad)"></div></div><span class="num" id="p1"></span></div>
+    <div id="words" hidden>
+      <div class="label">판정에 결정적인 단어</div>
+      <div id="marked"></div>
+    </div>
   </div>
 
   <footer>입력한 문장은 서버로 전송되지 않고 브라우저 안에서만 처리됩니다. 128토큰이 넘는 뒷부분은 무시됩니다.</footer>
@@ -94,16 +102,55 @@
     status.textContent = "모델을 불러오지 못했습니다: " + e.message;
   }
 
+  // 문장 여러 개를 한 번에 넣고 각각의 욕설 확률을 돌려준다
+  async function offensiveProbs(texts) {
+    const inputs = await tokenizer(texts, { padding: true, truncation: true, max_length: 128 });
+    const d = (await model(inputs)).logits.data;
+    return texts.map((_, i) => 1 / (1 + Math.exp(d[2 * i] - d[2 * i + 1])));
+  }
+
+  // 모델은 문장 단위 분류라 단어 위치를 직접 주지 않는다.
+  // 그래서 어절을 하나씩 빼 보며 욕설 확률을 가장 크게 떨어뜨리는 어절을 고르고,
+  // 문장이 정상으로 바뀔 때까지 반복한다. 욕설이 여러 개면 하나만 빼서는 확률이 안 떨어지기 때문이다.
+  async function findWords(words) {
+    const removed = new Set();
+    let p = 1;
+    while (p >= 0.5 && removed.size < words.length) {
+      const cand = words.map((_, i) => i).filter((i) => !removed.has(i));
+      const texts = cand.map((i) => words.filter((_, j) => j !== i && !removed.has(j)).join(" "));
+      const ps = await offensiveProbs(texts);
+      const best = ps.indexOf(Math.min(...ps));
+      removed.add(cand[best]);
+      p = ps[best];
+    }
+    return removed;
+  }
+
+  function showWords(words, removed) {
+    const box = $("marked");
+    box.replaceChildren();
+    words.forEach((w, i) => {
+      if (i) box.append(" ");
+      if (removed.has(i)) {
+        const m = document.createElement("mark");
+        m.textContent = w;
+        box.append(m);
+      } else {
+        box.append(w);
+      }
+    });
+    $("words").hidden = false;
+  }
+
+  const MAX_WORDS = 40;
+
   async function classify() {
     const value = text.value.trim();
     if (!value || !model) return;
     run.disabled = true;
-    const inputs = await tokenizer(value, { truncation: true, max_length: 128 });
-    const { logits } = await model(inputs);
-    const [a, b] = logits.data;
-    const m = Math.max(a, b);
-    const e0 = Math.exp(a - m), e1 = Math.exp(b - m);
-    const p0 = e0 / (e0 + e1), p1 = 1 - p0;
+    $("words").hidden = true;
+    const [p1] = await offensiveProbs([value]);
+    const p0 = 1 - p1;
 
     $("verdict").textContent = p1 >= 0.5 ? "욕설·혐오 표현입니다" : "정상 문장입니다";
     $("verdict").style.color = p1 >= 0.5 ? "var(--bad)" : "var(--clean)";
@@ -112,6 +159,13 @@
     $("f0").style.width = p0 * 100 + "%";
     $("f1").style.width = p1 * 100 + "%";
     $("result").hidden = false;
+
+    const words = value.split(/\s+/);
+    if (p1 >= 0.5 && words.length <= MAX_WORDS) {
+      status.textContent = "단어 찾는 중...";
+      showWords(words, await findWords(words));
+      status.textContent = "";
+    }
     run.disabled = false;
   }
 
