@@ -11,7 +11,7 @@ models:
 short_description: Korean offensive text classifier
 ---
 
-# kcbert-profanity demo
+# kcbert-profanity
 
 Type a Korean sentence and the model tells you whether it is clean or offensive.
 
