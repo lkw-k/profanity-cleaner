@@ -147,12 +147,13 @@ Since label 1 is the majority class, F1 looks higher than accuracy. I did not me
 
 ## Limitations
 
+- The training set is small (about 15,000 sentences), so misclassification is expected, especially on sentences unlike the training data.
 - Label 1 mixes swear words, insults, and hate speech. The model does not tell you which one it found.
 - It looks at one sentence at a time, without conversation context.
 - 75% of the training data is offensive, so expect some false positives on slang, jokes between friends, or strongly worded opinions.
 - The data comes from news comments and community posts. Game chat, formal writing, and very short messages may work worse.
 - Swear words written in unusual ways (spaces in the middle, symbols, consonants only like ㅅㅂ) can be missed if they did not appear in training.
-- Korean only.
+- Korean only. English swear words such as "fuck" or "shit" are not detected.
 - Anything after 128 tokens was cut off during training.
 
 Do not use this model alone to ban or punish users. Have a person check the results.

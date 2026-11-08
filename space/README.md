@@ -20,5 +20,8 @@ Model card: [illimax/kcbert-profanity](https://huggingface.co/illimax/kcbert-pro
 The model runs in your browser with transformers.js, using the 8-bit quantized ONNX weights (about 110MB, downloaded once).
 Your text is not sent to a server.
 
+The model was trained on only about 15,000 sentences, so it can make mistakes.
+It works for Korean only and does not detect English swear words.
+
 "Offensive" here includes swear words, insults, and hate speech.
 Input is cut at 128 tokens.
